@@ -650,7 +650,7 @@ SLIDES = DEFAULT_HOME.map(x => ({ ...x }));
 /* ---------- Identifiants des textes modifiables sur la page ---------- */
 const RICH_IDS = { tAbout:"t_about", tContact:"t_contact", tSante:"t_sante", tRech:"t_recherches", santeText:"sante_text",
   worksSub:"works_sub", rH1:"r_h1", rP1:"r_p1", rH2:"r_h2", rP2:"r_p2", rP3:"r_p3", rH3:"r_h3", rSub3:"r_sub3", rP4:"r_p4",
-  aboutTitle:"about_title", aboutText:"about_text", cAddr:"address", cHours:"hours", cTel:"phone", cMail:"email", copy:"copyright" };
+  logoTxt:"site_name", aboutTitle:"about_title", aboutText:"about_text", cAddr:"address", cHours:"hours", cTel:"phone", cMail:"email", copy:"copyright" };
 
 
 /* ---------- Pages : une page par entrée du menu ---------- */
@@ -684,7 +684,7 @@ function applySettings(){
   $("logoImg").onerror = () => { if($("logoImg").src !== LOGO) $("logoImg").src = LOGO; };
   $("aboutLogo").onerror = () => { $("aboutLogo").src = LOGO; };
   $("footLogo").onerror = () => { $("footLogo").src = LOGO; };
-  $("logoTxt").hidden = false; $("logoTxt").textContent = plain(S.site_name);
+  $("logoTxt").hidden = false;
   const ab = $("aboutPic"), img = safeUrl(S.about_image);
   ab.classList.toggle("has", !!img);
   ab.style.backgroundImage = img ? cssUrl(img) : "";
@@ -1114,10 +1114,30 @@ function slideModal(){
   };
   const del = $("#del", ov);
   if(del) del.onclick = async () => {
-    if(!confirm("Supprimer cette diapo ?")) return;
+    if(!del.dataset.armed){ del.dataset.armed = "1"; del.textContent = "Confirmer la suppression"; return; }
     L.splice(i, 1);
     if(!(await saveHome())) return;
     ov.close(); await N.reload(true); N.go(Math.min(i, L.length - 1)); refresh(); toast("Supprimée");
+  };
+}
+function manageSlides(){
+  syncHome();
+  const L = N.data().SLIDES;
+  const ov = modal(`<h3>Supprimer des diapos</h3><p style="margin:0 0 8px;color:#5b6b7a">Cochez les diapos à supprimer.</p>
+    <div style="max-height:52vh;overflow:auto">${L.map((s, i) => `<label style="display:flex;gap:10px;align-items:flex-start;margin:8px 0;font-weight:600"><input type="checkbox" data-i="${i}" style="width:22px;height:22px;flex:none"><span>${i + 1}. ${esc((plain(s.h) || plain(s.p) || "(sans texte)").slice(0, 70))}</span></label>`).join("")}</div>
+    <div class="ed-row"><button class="ed-b r" id="del">Supprimer les diapos cochées</button><button class="ed-b l" id="cx">Fermer</button></div>`);
+  $("#cx", ov).onclick = () => ov.close();
+  let armed = false; const del = $("#del", ov);
+  ov.addEventListener("change", () => { armed = false; del.textContent = "Supprimer les diapos cochées"; });
+  del.onclick = async () => {
+    const idx = [...ov.querySelectorAll("input[data-i]:checked")].map(x => +x.dataset.i);
+    if(!idx.length) return toast("Cochez au moins une diapo", true);
+    if(idx.length >= L.length) return toast("Gardez au moins une diapo", true);
+    if(!armed){ armed = true; del.textContent = "Confirmer : supprimer " + idx.length + " diapo(s)"; return; }
+    const keep = L.filter((_, i) => !idx.includes(i));
+    L.length = 0; keep.forEach(x => L.push(x));
+    if(!(await saveHome())) return;
+    ov.close(); await N.reload(true); N.go(0); refresh(); toast("Supprimé ✔");
   };
 }
 async function addSlide(){
@@ -1191,13 +1211,14 @@ function richBar(){
 
 function enable(){
   window.__editing = true; css(); document.body.classList.add("editing");
+  const lg = document.querySelector(".logo"); if(lg) lg.removeAttribute("href");
   document.addEventListener("click", e => { if(window.__editing && e.target.closest("[contenteditable=true]")) e.preventDefault(); }, true);
   document.addEventListener("input", e => { const k = e.target.dataset && e.target.dataset.key; if(!k) return;
     document.querySelectorAll(`[data-key="${k}"]`).forEach(o => { if(o !== e.target) o.innerHTML = e.target.innerHTML; }); });
   const bar = document.createElement("div"); bar.className = "ed-bar";
   bar.innerHTML = `<button class="ed-b g" id="b-save">💾 Enregistrer les textes</button>
     <button class="ed-b" id="b-look">🎨 Logo et couleurs</button><button class="ed-b" id="b-slider">⏱ Défilement et dégradé</button><button class="ed-b" id="b-menu">☰ Menu et boutons</button>
-    <button class="ed-b" id="b-slimg">🖼 Photo de cette diapo</button><button class="ed-b" id="b-slide">＋ Diapo d'accueil</button>
+    <button class="ed-b" id="b-slimg">🖼 Photo de cette diapo</button><button class="ed-b" id="b-slide">＋ Diapo d'accueil</button><button class="ed-b" id="b-slidel">🗑 Supprimer des diapos</button>
     <button class="ed-b" id="b-sante">🖼 Images « Votre santé »</button>
     <button class="ed-b" id="b-prod">＋ Produit</button>
     <button class="ed-b" id="b-contact">WhatsApp et réseaux</button>
@@ -1211,6 +1232,7 @@ function enable(){
   $("#b-contact").onclick = () => settingsModal(GROUPS.contact);
   $("#b-slide").onclick = addSlide;
   $("#b-slimg").onclick = slideModal;
+  $("#b-slidel").onclick = manageSlides;
   $("#b-sante").onclick = () => settingsModal(GROUPS.sante);
   $("#b-prod").onclick = () => formModal("products", null);
   $("#b-msg").onclick = messagesModal;
